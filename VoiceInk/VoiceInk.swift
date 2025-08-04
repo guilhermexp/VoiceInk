@@ -2,7 +2,6 @@ import SwiftUI
 import SwiftData
 import Sparkle
 import AppKit
-import OSLog
 
 @main
 struct VoiceInkApp: App {
@@ -210,6 +209,4 @@ struct WindowAccessor: NSViewRepresentable {
     
     func updateNSView(_ nsView: NSView, context: Context) {}
 }
-
-
 

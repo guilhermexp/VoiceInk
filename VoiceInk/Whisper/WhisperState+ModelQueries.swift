@@ -14,16 +14,16 @@ extension WhisperState {
                 }
             case .groq:
                 let key = UserDefaults.standard.string(forKey: "GROQAPIKey")
-                return key != nil && !key!.isEmpty
+                return key?.isEmpty == false
             case .elevenLabs:
                 let key = UserDefaults.standard.string(forKey: "ElevenLabsAPIKey")
-                return key != nil && !key!.isEmpty
+                return key?.isEmpty == false
             case .deepgram:
                 let key = UserDefaults.standard.string(forKey: "DeepgramAPIKey")
-                return key != nil && !key!.isEmpty
+                return key?.isEmpty == false
             case .mistral:
                 let key = UserDefaults.standard.string(forKey: "MistralAPIKey")
-                return key != nil && !key!.isEmpty
+                return key?.isEmpty == false
             case .custom:
                 // Custom models are always usable since they contain their own API keys
                 return true
