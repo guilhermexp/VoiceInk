@@ -320,8 +320,6 @@ class WhisperState: NSObject, ObservableObject {
                 try? modelContext.save()
             }
             
-            // License check removed for open source version
-
             text += " "
 
             if await checkCancellationAndCleanup() { return }
