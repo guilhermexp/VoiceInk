@@ -59,7 +59,7 @@ class WhisperState: NSObject, ObservableObject {
     let modelContext: ModelContext
     
     // Transcription Services
-    private var localTranscriptionService: LocalTranscriptionService!
+    private var localTranscriptionService: LocalTranscriptionService
     private lazy var cloudTranscriptionService = CloudTranscriptionService()
     private lazy var nativeAppleTranscriptionService = NativeAppleTranscriptionService()
     
@@ -152,7 +152,8 @@ class WhisperState: NSObject, ObservableObject {
                 return
             }
             shouldCancelRecording = false
-            requestRecordPermission { [self] granted in
+            requestRecordPermission { [weak self] granted in
+                guard let self = self else { return }
                 if granted {
                     Task {
                         do {

@@ -131,10 +131,10 @@ struct RecorderStatusDisplay: View {
                     color: .white,
                     isActive: currentState == .recording
                 )
-                .scaleEffect(y: menuBarHeight != nil ? min(1.0, (menuBarHeight! - 8) / 25) : 1.0, anchor: .center)
+                .scaleEffect(y: menuBarHeight.map { min(1.0, ($0 - 8) / 25) } ?? 1.0, anchor: .center)
             } else {
                 StaticVisualizer(color: .white)
-                    .scaleEffect(y: menuBarHeight != nil ? min(1.0, (menuBarHeight! - 8) / 25) : 1.0, anchor: .center)
+                    .scaleEffect(y: menuBarHeight.map { min(1.0, ($0 - 8) / 25) } ?? 1.0, anchor: .center)
             }
         }
     }
