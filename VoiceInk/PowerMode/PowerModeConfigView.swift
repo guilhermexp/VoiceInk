@@ -35,15 +35,32 @@ struct ConfigurationView: View {
     
     // New state for screen capture toggle
     @State private var useScreenCapture = false
-    // NEW: Auto-send toggle state
     @State private var isAutoSendEnabled = false
+    @State private var isDefault = false
     
     // State for prompt editing (similar to EnhancementSettingsView)
     @State private var isEditingPrompt = false
     @State private var selectedPromptForEdit: CustomPrompt?
+
+    private func languageSelectionDisabled() -> Bool {
+        guard let selectedModelName = effectiveModelName,
+              let model = whisperState.allAvailableModels.first(where: { $0.name == selectedModelName })
+        else {
+            return false
+        }
+        return model.provider == .parakeet || model.provider == .gemini
+    }
     
     // Whisper state for model selection
     @EnvironmentObject private var whisperState: WhisperState
+    
+    // Computed property to check if current config is the default
+    private var isCurrentConfigDefault: Bool {
+        if case .edit(let config) = mode {
+            return config.isDefault
+        }
+        return false
+    }
     
     private var filteredApps: [(url: URL, name: String, bundleId: String, icon: NSImage)] {
         if searchText.isEmpty {
@@ -78,6 +95,7 @@ struct ConfigurationView: View {
             _selectedEmoji = State(initialValue: "✏️")
             _useScreenCapture = State(initialValue: false)
             _isAutoSendEnabled = State(initialValue: false)
+            _isDefault = State(initialValue: false)
             // Default to current global AI provider/model for new configurations - use UserDefaults only
             _selectedAIProvider = State(initialValue: UserDefaults.standard.string(forKey: "selectedAIProvider"))
             _selectedAIModel = State(initialValue: nil) // Initialize to nil and set it after view appears
@@ -94,19 +112,7 @@ struct ConfigurationView: View {
             _websiteConfigs = State(initialValue: latestConfig.urlConfigs ?? [])
             _useScreenCapture = State(initialValue: latestConfig.useScreenCapture)
             _isAutoSendEnabled = State(initialValue: latestConfig.isAutoSendEnabled)
-            _selectedAIProvider = State(initialValue: latestConfig.selectedAIProvider)
-            _selectedAIModel = State(initialValue: latestConfig.selectedAIModel)
-        case .editDefault(let config):
-            // Always use the latest default config
-            let latestConfig = powerModeManager.defaultConfig
-            _isAIEnhancementEnabled = State(initialValue: latestConfig.isAIEnhancementEnabled)
-            _selectedPromptId = State(initialValue: latestConfig.selectedPrompt.flatMap { UUID(uuidString: $0) })
-            _selectedTranscriptionModelName = State(initialValue: latestConfig.selectedTranscriptionModelName)
-            _selectedLanguage = State(initialValue: latestConfig.selectedLanguage)
-            _configName = State(initialValue: latestConfig.name)
-            _selectedEmoji = State(initialValue: latestConfig.emoji)
-            _useScreenCapture = State(initialValue: latestConfig.useScreenCapture)
-            _isAutoSendEnabled = State(initialValue: latestConfig.isAutoSendEnabled)
+            _isDefault = State(initialValue: latestConfig.isDefault)
             _selectedAIProvider = State(initialValue: latestConfig.selectedAIProvider)
             _selectedAIModel = State(initialValue: latestConfig.selectedAIModel)
         }
@@ -124,8 +130,21 @@ struct ConfigurationView: View {
                 
                 if case .edit(let config) = mode {
                     Button("Delete") {
-                        powerModeManager.removeConfiguration(with: config.id)
-                        presentationMode.wrappedValue.dismiss()
+                        let alert = NSAlert()
+                        alert.messageText = "Delete Power Mode?"
+                        alert.informativeText = "Are you sure you want to delete the '\(config.name)' power mode? This action cannot be undone."
+                        alert.alertStyle = .warning
+                        alert.addButton(withTitle: "Delete")
+                        alert.addButton(withTitle: "Cancel")
+                        
+                        // Style the Delete button as destructive
+                        alert.buttons[0].hasDestructiveAction = true
+                        
+                        let response = alert.runModal()
+                        if response == .alertFirstButtonReturn {
+                            powerModeManager.removeConfiguration(with: config.id)
+                            presentationMode.wrappedValue.dismiss()
+                        }
                     }
                     .foregroundColor(.red)
                     .padding(.trailing, 8)
@@ -145,212 +164,207 @@ struct ConfigurationView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     // Main Input Section
-                    HStack(spacing: 16) {
-                        Button(action: {
-                            isShowingEmojiPicker.toggle()
-                        }) {
-                            ZStack {
-                                Circle()
-                                    .fill(Color.accentColor.opacity(0.15))
-                                    .frame(width: 48, height: 48)
-                                
-                                Text(selectedEmoji)
-                                    .font(.system(size: 24))
-                            }
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(mode.isEditingDefault)
-                        .opacity(mode.isEditingDefault ? 0.5 : 1)
-                        .popover(isPresented: $isShowingEmojiPicker, arrowEdge: .bottom) {
-                            EmojiPickerView(
-                                selectedEmoji: $selectedEmoji,
-                                isPresented: $isShowingEmojiPicker
-                            )
-                        }
-                        
-                        TextField("Name your power mode", text: $configName)
-                            .font(.system(size: 18, weight: .bold))
-                            .textFieldStyle(.plain)
-                            .foregroundColor(.primary)
-                            .tint(.accentColor)
-                            .disabled(mode.isEditingDefault)
-                            .focused($isNameFieldFocused)
-                            .onAppear {
-                                if !mode.isEditingDefault {
-                                    isNameFieldFocused = true
+                    VStack(spacing: 16) {
+                        HStack(spacing: 16) {
+                            Button(action: {
+                                isShowingEmojiPicker.toggle()
+                            }) {
+                                ZStack {
+                                    Circle()
+                                        .fill(Color.accentColor.opacity(0.15))
+                                        .frame(width: 48, height: 48)
+                                    
+                                    Text(selectedEmoji)
+                                        .font(.system(size: 24))
                                 }
                             }
+                            .buttonStyle(.plain)
+                            .popover(isPresented: $isShowingEmojiPicker, arrowEdge: .bottom) {
+                                EmojiPickerView(
+                                    selectedEmoji: $selectedEmoji,
+                                    isPresented: $isShowingEmojiPicker
+                                )
+                            }
+                            
+                            TextField("Name your power mode", text: $configName)
+                                .font(.system(size: 18, weight: .bold))
+                                .textFieldStyle(.plain)
+                                .foregroundColor(.primary)
+                                .tint(.accentColor)
+                                .focused($isNameFieldFocused)
+                        }
+                        
+                        // Default Power Mode Toggle
+                        HStack {
+                            Toggle("Set as default power mode", isOn: $isDefault)
+                                .font(.system(size: 14))
+                            
+                            InfoTip(
+                                title: "Default Power Mode",
+                                message: "Default power mode is used when no specific app or website matches are found"
+                            )
+                            
+                            Spacer()
+                        }
                     }
                     .padding(.horizontal, 20)
                     .padding(.vertical, 16)
                     .background(CardBackground(isSelected: false))
                     .padding(.horizontal)
+                    .onAppear {
+                        // Add a small delay to ensure the view is fully loaded
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            isNameFieldFocused = true
+                        }
+                    }
                     
-                    // Enhanced Emoji Picker with Custom Emoji Support
-                    // if isShowingEmojiPicker { // <<< This conditional block will be removed
-                    //     EmojiPickerView(
-                    //         selectedEmoji: $selectedEmoji,
-                    //         isPresented: $isShowingEmojiPicker
-                    //     )
-                    //     .padding(.horizontal)
-                    // }
-                    
-                    // SECTION 1: TRIGGERS
-                    if !mode.isEditingDefault {
-                        VStack(spacing: 16) {
-                            // Section Header
-                            SectionHeader(title: "When to Trigger")
-                            
-                            // Applications Subsection
-                            VStack(alignment: .leading, spacing: 12) {
-                                HStack {
-                                    Text("Applications")
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
-                                    
-                                    Spacer()
-                                    
-                                    Button(action: {
-                                        loadInstalledApps()
-                                        isShowingAppPicker = true
-                                    }) {
-                                        Label("Add App", systemImage: "plus.circle.fill")
-                                            .font(.subheadline)
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                                
-                                if selectedAppConfigs.isEmpty {
-                                    HStack {
-                                        Spacer()
-                                        Text("No applications added")
-                                            .foregroundColor(.secondary)
-                                            .font(.subheadline)
-                                        Spacer()
-                                    }
-                                    .padding()
-                                    .background(CardBackground(isSelected: false))
-                                } else {
-                                    // Grid of selected apps that wraps to next line
-                                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 50, maximum: 55), spacing: 10)], spacing: 10) {
-                                        ForEach(selectedAppConfigs) { appConfig in
-                                            VStack {
-                                                ZStack(alignment: .topTrailing) {
-                                                    // App icon - completely filling the container
-                                                    if let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: appConfig.bundleIdentifier) {
-                                                        Image(nsImage: NSWorkspace.shared.icon(forFile: appURL.path))
-                                                            .resizable()
-                                                            .aspectRatio(contentMode: .fill)
-                                                            .frame(width: 50, height: 50)
-                                                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                                                    } else {
-                                                        Image(systemName: "app.fill")
-                                                            .resizable()
-                                                            .aspectRatio(contentMode: .fill)
-                                                            .frame(width: 50, height: 50)
-                                                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                                                    }
-                                                    
-                                                    // Remove button
-                                                    Button(action: {
-                                                        selectedAppConfigs.removeAll(where: { $0.id == appConfig.id })
-                                                    }) {
-                                                        Image(systemName: "xmark.circle.fill")
-                                                            .font(.system(size: 14))
-                                                            .foregroundColor(.white)
-                                                            .background(Circle().fill(Color.black.opacity(0.6)))
-                                                    }
-                                                    .buttonStyle(.plain)
-                                                    .offset(x: 6, y: -6)
-                                                }
-                                            }
-                                            .frame(width: 50, height: 50)
-                                            .background(CardBackground(isSelected: false, cornerRadius: 10))
-                                        }
-                                    }
-                                }
-                            }
-                            
-                            Divider()
-                            
-                            // Websites Subsection
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text("Websites")
+                    VStack(spacing: 16) {
+                        SectionHeader(title: "When to Trigger")
+                        
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Text("Applications")
                                     .font(.subheadline)
                                     .foregroundColor(.secondary)
-                                    
-                                // Add URL Field
-                                HStack {
-                                    TextField("Enter website URL (e.g., google.com)", text: $newWebsiteURL)
-                                    .textFieldStyle(.roundedBorder)
-                                        .onSubmit {
-                                            addWebsite()
-                                        }
-                                    
-                                    Button(action: addWebsite) {
-                                        Image(systemName: "plus.circle.fill")
-                                            .foregroundColor(.accentColor)
-                                            .font(.system(size: 18))
-                                    }
-                                    .buttonStyle(.plain)
-                                    .disabled(newWebsiteURL.isEmpty)
-                                }
                                 
-                                if websiteConfigs.isEmpty {
-                                    HStack {
-                                        Spacer()
-                                        Text("No websites added")
-                                            .foregroundColor(.secondary)
-                                            .font(.subheadline)
-                                        Spacer()
-                                    }
-                                    .padding()
-                                    .background(CardBackground(isSelected: false))
-                                } else {
-                                    // Grid of website tags that wraps to next line
-                                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 100, maximum: 160), spacing: 10)], spacing: 10) {
-                                        ForEach(websiteConfigs) { urlConfig in
-                                            HStack(spacing: 4) {
-                                                Image(systemName: "globe")
-                                                    .font(.system(size: 11))
-                                                    .foregroundColor(.accentColor)
+                                Spacer()
+                                
+                                Button(action: {
+                                    loadInstalledApps()
+                                    isShowingAppPicker = true
+                                }) {
+                                    Label("Add App", systemImage: "plus.circle.fill")
+                                        .font(.subheadline)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            
+                            if selectedAppConfigs.isEmpty {
+                                HStack {
+                                    Spacer()
+                                    Text("No applications added")
+                                        .foregroundColor(.secondary)
+                                        .font(.subheadline)
+                                    Spacer()
+                                }
+                                .padding()
+                                .background(CardBackground(isSelected: false))
+                            } else {
+                                // Grid of selected apps that wraps to next line
+                                LazyVGrid(columns: [GridItem(.adaptive(minimum: 50, maximum: 55), spacing: 10)], spacing: 10) {
+                                    ForEach(selectedAppConfigs) { appConfig in
+                                        VStack {
+                                            ZStack(alignment: .topTrailing) {
+                                                // App icon - completely filling the container
+                                                if let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: appConfig.bundleIdentifier) {
+                                                    Image(nsImage: NSWorkspace.shared.icon(forFile: appURL.path))
+                                                        .resizable()
+                                                        .aspectRatio(contentMode: .fill)
+                                                        .frame(width: 50, height: 50)
+                                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                                } else {
+                                                    Image(systemName: "app.fill")
+                                                        .resizable()
+                                                        .aspectRatio(contentMode: .fill)
+                                                        .frame(width: 50, height: 50)
+                                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                                }
                                                 
-                                                Text(urlConfig.url)
-                                                    .font(.system(size: 11))
-                                                    .lineLimit(1)
-                                                
-                                                Spacer(minLength: 0)
-                                                
+                                                // Remove button
                                                 Button(action: {
-                                                    websiteConfigs.removeAll(where: { $0.id == urlConfig.id })
+                                                    selectedAppConfigs.removeAll(where: { $0.id == appConfig.id })
                                                 }) {
                                                     Image(systemName: "xmark.circle.fill")
-                                                        .font(.system(size: 9))
-                                                        .foregroundColor(.secondary)
+                                                        .font(.system(size: 14))
+                                                        .foregroundColor(.white)
+                                                        .background(Circle().fill(Color.black.opacity(0.6)))
                                                 }
                                                 .buttonStyle(.plain)
+                                                .offset(x: 6, y: -6)
                                             }
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 6)
-                                            .frame(height: 28)
-                                            .background(CardBackground(isSelected: false, cornerRadius: 10))
                                         }
+                                        .frame(width: 50, height: 50)
+                                        .background(CardBackground(isSelected: false, cornerRadius: 10))
                                     }
-                                    .padding(8)
                                 }
                             }
                         }
-                        .padding()
-                        .background(CardBackground(isSelected: false))
-                        .padding(.horizontal)
+                        
+                        Divider()
+                        
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Websites")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                
+                            // Add URL Field
+                            HStack {
+                                TextField("Enter website URL (e.g., google.com)", text: $newWebsiteURL)
+                                .textFieldStyle(.roundedBorder)
+                                    .onSubmit {
+                                        addWebsite()
+                                    }
+                                
+                                Button(action: addWebsite) {
+                                    Image(systemName: "plus.circle.fill")
+                                        .foregroundColor(.accentColor)
+                                        .font(.system(size: 18))
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(newWebsiteURL.isEmpty)
+                            }
+                            
+                            if websiteConfigs.isEmpty {
+                                HStack {
+                                    Spacer()
+                                    Text("No websites added")
+                                        .foregroundColor(.secondary)
+                                        .font(.subheadline)
+                                    Spacer()
+                                }
+                                .padding()
+                                .background(CardBackground(isSelected: false))
+                            } else {
+                                // Grid of website tags that wraps to next line
+                                LazyVGrid(columns: [GridItem(.adaptive(minimum: 100, maximum: 160), spacing: 10)], spacing: 10) {
+                                    ForEach(websiteConfigs) { urlConfig in
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "globe")
+                                                .font(.system(size: 11))
+                                                .foregroundColor(.accentColor)
+                                            
+                                            Text(urlConfig.url)
+                                                .font(.system(size: 11))
+                                                .lineLimit(1)
+                                            
+                                            Spacer(minLength: 0)
+                                            
+                                            Button(action: {
+                                                websiteConfigs.removeAll(where: { $0.id == urlConfig.id })
+                                            }) {
+                                                Image(systemName: "xmark.circle.fill")
+                                                    .font(.system(size: 9))
+                                                    .foregroundColor(.secondary)
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 6)
+                                        .frame(height: 28)
+                                        .background(CardBackground(isSelected: false, cornerRadius: 10))
+                                    }
+                                }
+                                .padding(8)
+                            }
+                        }
                     }
+                    .padding()
+                    .background(CardBackground(isSelected: false))
+                    .padding(.horizontal)
                     
-                    // SECTION 2: TRANSCRIPTION
                     VStack(spacing: 16) {
-                        // Section Header
                         SectionHeader(title: "Transcription")
                         
-                        // Whisper Model Selection Subsection
                         if whisperState.usableModels.isEmpty {
                             Text("No transcription models available. Please connect to a cloud service or download a local model in the AI Models tab.")
                                 .font(.subheadline)
@@ -359,7 +373,6 @@ struct ConfigurationView: View {
                                 .frame(maxWidth: .infinity, alignment: .center)
                                 .background(CardBackground(isSelected: false))
                         } else {
-                            // Create a simple binding that uses current model if nil
                             let modelBinding = Binding<String?>(
                                 get: {
                                     selectedTranscriptionModelName ?? whisperState.usableModels.first?.name
@@ -383,12 +396,22 @@ struct ConfigurationView: View {
                             }
                         }
                         
-                        // Language Selection Subsection
-                        if let selectedModel = effectiveModelName,
-                           let modelInfo = whisperState.allAvailableModels.first(where: { $0.name == selectedModel }),
-                           modelInfo.isMultilingualModel {
+                        if languageSelectionDisabled() {
+                            HStack {
+                                Text("Language")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                
+                                Text("Autodetected")
+                                    .font(.subheadline)
+                                    .foregroundColor(.secondary)
+                                
+                                Spacer()
+                            }
+                        } else if let selectedModel = effectiveModelName,
+                                  let modelInfo = whisperState.allAvailableModels.first(where: { $0.name == selectedModel }),
+                                  modelInfo.isMultilingualModel {
                             
-                            // Create a simple binding that uses UserDefaults language if nil
                             let languageBinding = Binding<String?>(
                                 get: {
                                     selectedLanguage ?? UserDefaults.standard.string(forKey: "SelectedLanguage") ?? "auto"
@@ -417,24 +440,26 @@ struct ConfigurationView: View {
                         } else if let selectedModel = effectiveModelName,
                                   let modelInfo = whisperState.allAvailableModels.first(where: { $0.name == selectedModel }),
                                   !modelInfo.isMultilingualModel {
-                            // Silently set to English without showing UI
-                            let _ = { selectedLanguage = "en" }()
+                            
+                            EmptyView()
+                                .onAppear {
+                                    if selectedLanguage == nil {
+                                        selectedLanguage = "en"
+                                    }
+                                }
                         }
                     }
                     .padding()
                     .background(CardBackground(isSelected: false))
                     .padding(.horizontal)
                     
-                    // SECTION 3: AI ENHANCEMENT
                     VStack(spacing: 16) {
-                        // Section Header
                         SectionHeader(title: "AI Enhancement")
 
                         Toggle("Enable AI Enhancement", isOn: $isAIEnhancementEnabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .onChange(of: isAIEnhancementEnabled) { oldValue, newValue in
                                 if newValue {
-                                    // When enabling AI enhancement, set default values if none are selected
                                     if selectedAIProvider == nil {
                                         selectedAIProvider = aiService.selectedProvider.rawValue
                                     }
@@ -446,21 +471,18 @@ struct ConfigurationView: View {
 
                         Divider()
                             
-                            // AI Provider Selection - Match style with Whisper model selection
-                            // Create a binding for the provider selection that falls back to global settings
                             let providerBinding = Binding<AIProvider>(
                                 get: {
                                     if let providerName = selectedAIProvider,
                                        let provider = AIProvider(rawValue: providerName) {
                                         return provider
                                     }
-                                    // Just return the global provider without modifying state
                                     return aiService.selectedProvider
                                 },
                                 set: { newValue in
-                                    selectedAIProvider = newValue.rawValue // Update local state for UI responsiveness
-                                    aiService.selectedProvider = newValue // Update global AI service state
-                                    selectedAIModel = nil                 // Reset selected model when provider changes
+                                    selectedAIProvider = newValue.rawValue
+                                    aiService.selectedProvider = newValue
+                                    selectedAIModel = nil
                                 }
                             )
                             
@@ -487,9 +509,7 @@ struct ConfigurationView: View {
                                     }
                                     .labelsHidden()
                                     .onChange(of: selectedAIProvider) { oldValue, newValue in
-                                        // When provider changes, ensure we have a valid model for that provider
                                         if let provider = newValue.flatMap({ AIProvider(rawValue: $0) }) {
-                                            // Set default model for this provider
                                             selectedAIModel = provider.defaultModel
                                         }
                                     }
@@ -497,7 +517,6 @@ struct ConfigurationView: View {
                                 }
                             }
                             
-                            // AI Model Selection - Match style with whisper language selection
                             let providerName = selectedAIProvider ?? aiService.selectedProvider.rawValue
                             if let provider = AIProvider(rawValue: providerName),
                                provider != .custom {
@@ -513,18 +532,15 @@ struct ConfigurationView: View {
                                             .italic()
                                             .frame(maxWidth: .infinity, alignment: .leading)
                                     } else {
-                                        // Create binding that falls back to current model for the selected provider
                                         let modelBinding = Binding<String>(
                                             get: { 
                                                 if let model = selectedAIModel, !model.isEmpty {
                                                     return model
                                                 }
-                                                // Just return the current model without modifying state
                                                 return aiService.currentModel
                                             },
                                             set: { newModelValue in
-                                                selectedAIModel = newModelValue // Update local state
-                                                // Update the model in AIService for the current provider
+                                                selectedAIModel = newModelValue
                                                 aiService.selectModel(newModelValue)
                                             }
                                         )
@@ -556,7 +572,6 @@ struct ConfigurationView: View {
                             }
                         
                             
-                            // Enhancement Prompts Section (reused from EnhancementSettingsView)
                             VStack(alignment: .leading, spacing: 12) {
                                 Text("Enhancement Prompt")
                                     .font(.headline)
@@ -593,7 +608,6 @@ struct ConfigurationView: View {
                     .background(CardBackground(isSelected: false))
                     .padding(.horizontal)
                     
-                    // SECTION 4: ADVANCED
                     VStack(spacing: 16) {
                         SectionHeader(title: "Advanced")
 
@@ -612,13 +626,22 @@ struct ConfigurationView: View {
                     .background(CardBackground(isSelected: false))
                     .padding(.horizontal)
                     
-                    // Save Button
-                    VoiceInkButton(
-                        title: mode.isAdding ? "Add New Power Mode" : "Save Changes",
-                        action: saveConfiguration,
-                        isDisabled: !canSave
-                    )
-                    .frame(maxWidth: .infinity)
+                    HStack {
+                        Spacer()
+                        Button(action: saveConfiguration) {
+                            Text(mode.isAdding ? "Add New Power Mode" : "Save Changes")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 8)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .fill(canSave ? Color(red: 0.3, green: 0.7, blue: 0.4) : Color(red: 0.3, green: 0.7, blue: 0.4).opacity(0.5))
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!canSave)
+                    }
                     .padding(.horizontal)
                 }
                 .padding(.vertical)
@@ -696,7 +719,8 @@ struct ConfigurationView: View {
                     useScreenCapture: useScreenCapture,
                     selectedAIProvider: selectedAIProvider,
                     selectedAIModel: selectedAIModel,
-                    isAutoSendEnabled: isAutoSendEnabled
+                    isAutoSendEnabled: isAutoSendEnabled,
+                    isDefault: isDefault
                 )
         case .edit(let config):
             var updatedConfig = config
@@ -712,20 +736,7 @@ struct ConfigurationView: View {
             updatedConfig.isAutoSendEnabled = isAutoSendEnabled
             updatedConfig.selectedAIProvider = selectedAIProvider
             updatedConfig.selectedAIModel = selectedAIModel
-            return updatedConfig
-            
-        case .editDefault(let config):
-            var updatedConfig = config
-            updatedConfig.name = configName
-            updatedConfig.emoji = selectedEmoji
-            updatedConfig.isAIEnhancementEnabled = isAIEnhancementEnabled
-            updatedConfig.selectedPrompt = selectedPromptId?.uuidString
-            updatedConfig.selectedTranscriptionModelName = selectedTranscriptionModelName
-            updatedConfig.selectedLanguage = selectedLanguage
-            updatedConfig.useScreenCapture = useScreenCapture
-            updatedConfig.isAutoSendEnabled = isAutoSendEnabled
-            updatedConfig.selectedAIProvider = selectedAIProvider
-            updatedConfig.selectedAIModel = selectedAIModel
+            updatedConfig.isDefault = isDefault
             return updatedConfig
         }
     }
@@ -737,28 +748,48 @@ struct ConfigurationView: View {
         let systemAppURLs = FileManager.default.urls(for: .applicationDirectory, in: .systemDomainMask)
         let allAppURLs = userAppURLs + localAppURLs + systemAppURLs
         
-        let apps = allAppURLs.flatMap { baseURL -> [URL] in
-            let enumerator = FileManager.default.enumerator(
-                at: baseURL,
-                includingPropertiesForKeys: [.isApplicationKey, .isDirectoryKey],
-                options: [.skipsHiddenFiles]
-            )
+        var allApps: [URL] = []
+        
+        func scanDirectory(_ baseURL: URL, depth: Int = 0) {
+            // Prevent infinite recursion in case of circular symlinks
+            guard depth < 5 else { return }
             
-            return enumerator?.compactMap { item -> URL? in
-                guard let url = item as? URL else { return nil }
+            guard let enumerator = FileManager.default.enumerator(
+                at: baseURL,
+                includingPropertiesForKeys: [.isApplicationKey, .isDirectoryKey, .isSymbolicLinkKey],
+                options: [.skipsHiddenFiles]
+            ) else { return }
+            
+            for item in enumerator {
+                guard let url = item as? URL else { continue }
                 
-                // If it's an app, return it and skip descending into it
-                if url.pathExtension == "app" {
-                    enumerator?.skipDescendants()
-                    return url
+                let resolvedURL = url.resolvingSymlinksInPath()
+                
+                // If it's an app, add it and skip descending into it
+                if resolvedURL.pathExtension == "app" {
+                    allApps.append(resolvedURL)
+                    enumerator.skipDescendants()
+                    continue
                 }
                 
-                // Continue searching in directories
-                return nil
-            } ?? []
+                // Check if this is a symlinked directory we should traverse manually
+                var isDirectory: ObjCBool = false
+                if url != resolvedURL && 
+                   FileManager.default.fileExists(atPath: resolvedURL.path, isDirectory: &isDirectory) && 
+                   isDirectory.boolValue {
+                    // This is a symlinked directory - traverse it manually
+                    enumerator.skipDescendants()
+                    scanDirectory(resolvedURL, depth: depth + 1)
+                }
+            }
         }
         
-        installedApps = apps.compactMap { url in
+        // Scan all app directories
+        for baseURL in allAppURLs {
+            scanDirectory(baseURL)
+        }
+        
+        installedApps = allApps.compactMap { url in
             guard let bundle = Bundle(url: url),
                   let bundleId = bundle.bundleIdentifier,
                   let name = (bundle.infoDictionary?["CFBundleName"] as? String) ??
@@ -790,8 +821,13 @@ struct ConfigurationView: View {
         switch mode {
         case .add:
             powerModeManager.addConfiguration(config)
-        case .edit, .editDefault:
+        case .edit:
             powerModeManager.updateConfiguration(config)
+        }
+        
+        // Handle default flag separately to ensure only one config is default
+        if isDefault {
+            powerModeManager.setAsDefault(configId: config.id)
         }
         
         presentationMode.wrappedValue.dismiss()

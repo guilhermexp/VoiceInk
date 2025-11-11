@@ -6,6 +6,9 @@ import AppKit
 extension KeyboardShortcuts.Name {
     static let toggleMiniRecorder = Self("toggleMiniRecorder")
     static let toggleMiniRecorder2 = Self("toggleMiniRecorder2")
+    static let pasteLastTranscription = Self("pasteLastTranscription")
+    static let pasteLastEnhancement = Self("pasteLastEnhancement")
+    static let retryLastTranscription = Self("retryLastTranscription")
 }
 
 @MainActor
@@ -25,6 +28,17 @@ class HotkeyManager: ObservableObject {
             setupHotkeyMonitoring()
         }
     }
+    @Published var isMiddleClickToggleEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(isMiddleClickToggleEnabled, forKey: "isMiddleClickToggleEnabled")
+            setupHotkeyMonitoring()
+        }
+    }
+    @Published var middleClickActivationDelay: Int {
+        didSet {
+            UserDefaults.standard.set(middleClickActivationDelay, forKey: "middleClickActivationDelay")
+        }
+    }
     
     private var whisperState: WhisperState
     private var miniRecorderShortcutManager: MiniRecorderShortcutManager
@@ -37,6 +51,10 @@ class HotkeyManager: ObservableObject {
     // NSEvent monitoring for modifier keys
     private var globalEventMonitor: Any?
     private var localEventMonitor: Any?
+    
+    // Middle-click event monitoring
+    private var middleClickMonitors: [Any?] = []
+    private var middleClickTask: Task<Void, Never>?
     
     // Key state tracking
     private var currentKeyState = false
@@ -99,26 +117,36 @@ class HotkeyManager: ObservableObject {
     }
     
     init(whisperState: WhisperState) {
-        // One-time migration from legacy single-hotkey settings
-        if UserDefaults.standard.object(forKey: "didMigrateHotkeys_v2") == nil {
-            // If legacy push-to-talk modifier key was enabled, carry it over
-            if UserDefaults.standard.bool(forKey: "isPushToTalkEnabled"),
-               let legacyRaw = UserDefaults.standard.string(forKey: "pushToTalkKey"),
-               let legacyKey = HotkeyOption(rawValue: legacyRaw) {
-                UserDefaults.standard.set(legacyKey.rawValue, forKey: "selectedHotkey1")
-            }
-            // If a custom shortcut existed, mark hotkey-1 as custom (shortcut itself already persisted)
-            if KeyboardShortcuts.getShortcut(for: .toggleMiniRecorder) != nil {
-                UserDefaults.standard.set(HotkeyOption.custom.rawValue, forKey: "selectedHotkey1")
-            }
-            // Leave second hotkey as .none
-            UserDefaults.standard.set(true, forKey: "didMigrateHotkeys_v2")
-        }
-        // ---- normal initialisation ----
         self.selectedHotkey1 = HotkeyOption(rawValue: UserDefaults.standard.string(forKey: "selectedHotkey1") ?? "") ?? .rightCommand
         self.selectedHotkey2 = HotkeyOption(rawValue: UserDefaults.standard.string(forKey: "selectedHotkey2") ?? "") ?? .none
+        
+        self.isMiddleClickToggleEnabled = UserDefaults.standard.bool(forKey: "isMiddleClickToggleEnabled")
+        let storedDelay = UserDefaults.standard.integer(forKey: "middleClickActivationDelay")
+        self.middleClickActivationDelay = storedDelay > 0 ? storedDelay : 200
+        
         self.whisperState = whisperState
         self.miniRecorderShortcutManager = MiniRecorderShortcutManager(whisperState: whisperState)
+
+        KeyboardShortcuts.onKeyUp(for: .pasteLastTranscription) { [weak self] in
+            guard let self = self else { return }
+            Task { @MainActor in
+                LastTranscriptionService.pasteLastTranscription(from: self.whisperState.modelContext)
+            }
+        }
+
+        KeyboardShortcuts.onKeyUp(for: .pasteLastEnhancement) { [weak self] in
+            guard let self = self else { return }
+            Task { @MainActor in
+                LastTranscriptionService.pasteLastEnhancement(from: self.whisperState.modelContext)
+            }
+        }
+
+        KeyboardShortcuts.onKeyUp(for: .retryLastTranscription) { [weak self] in
+            guard let self = self else { return }
+            Task { @MainActor in
+                LastTranscriptionService.retryLastTranscription(from: self.whisperState.modelContext, whisperState: self.whisperState)
+            }
+        }
         
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 100_000_000)
@@ -131,6 +159,7 @@ class HotkeyManager: ObservableObject {
         
         setupModifierKeyMonitoring()
         setupCustomShortcutMonitoring()
+        setupMiddleClickMonitoring()
     }
     
     private func setupModifierKeyMonitoring() {
@@ -151,6 +180,40 @@ class HotkeyManager: ObservableObject {
             }
             return event
         }
+    }
+    
+    private func setupMiddleClickMonitoring() {
+        guard isMiddleClickToggleEnabled else { return }
+
+        // Mouse Down
+        let downMonitor = NSEvent.addGlobalMonitorForEvents(matching: .otherMouseDown) { [weak self] event in
+            guard let self = self, event.buttonNumber == 2 else { return }
+
+            self.middleClickTask?.cancel()
+            self.middleClickTask = Task {
+                do {
+                    let delay = UInt64(self.middleClickActivationDelay) * 1_000_000 // ms to ns
+                    try await Task.sleep(nanoseconds: delay)
+                    
+                    guard self.isMiddleClickToggleEnabled, !Task.isCancelled else { return }
+                    
+                    Task { @MainActor in
+                        guard self.canProcessHotkeyAction else { return }
+                        await self.whisperState.handleToggleMiniRecorder()
+                    }
+                } catch {
+                    // Cancelled
+                }
+            }
+        }
+
+        // Mouse Up
+        let upMonitor = NSEvent.addGlobalMonitorForEvents(matching: .otherMouseUp) { [weak self] event in
+            guard let self = self, event.buttonNumber == 2 else { return }
+            self.middleClickTask?.cancel()
+        }
+
+        middleClickMonitors = [downMonitor, upMonitor]
     }
     
     private func setupCustomShortcutMonitoring() {
@@ -184,6 +247,14 @@ class HotkeyManager: ObservableObject {
             NSEvent.removeMonitor(monitor)
             localEventMonitor = nil
         }
+        
+        for monitor in middleClickMonitors {
+            if let monitor = monitor {
+                NSEvent.removeMonitor(monitor)
+            }
+        }
+        middleClickMonitors = []
+        middleClickTask?.cancel()
         
         resetKeyStates()
     }
@@ -351,5 +422,3 @@ class HotkeyManager: ObservableObject {
         }
     }
 }
-
-

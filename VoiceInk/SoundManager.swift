@@ -12,71 +12,58 @@ class SoundManager {
     @AppStorage("isSoundFeedbackEnabled") private var isSoundFeedbackEnabled = true
     
     private init() {
-        setupSounds()
+        Task(priority: .background) {
+            await setupSounds()
+        }
     }
     
-    private func setupSounds() {
-        print("Attempting to load sound files...")
-        
+    private func setupSounds() async {
         // Try loading directly from the main bundle
         if let startSoundURL = Bundle.main.url(forResource: "recstart", withExtension: "mp3"),
-           let stopSoundURL = Bundle.main.url(forResource: "pastes", withExtension: "mp3"),
+           let stopSoundURL = Bundle.main.url(forResource: "recstop", withExtension: "mp3"),
            let escSoundURL = Bundle.main.url(forResource: "esc", withExtension: "wav") {
-            print("Found sounds in main bundle")
-            try? loadSounds(start: startSoundURL, stop: stopSoundURL, esc: escSoundURL)
+            try? await loadSounds(start: startSoundURL, stop: stopSoundURL, esc: escSoundURL)
             return
-        }
-        
-        print("⚠️ Could not find sound files in the main bundle")
-        print("Bundle path: \(Bundle.main.bundlePath)")
-        
-        // List contents of the bundle for debugging
-        if let bundleURL = Bundle.main.resourceURL {
-            do {
-                let contents = try FileManager.default.contentsOfDirectory(at: bundleURL, includingPropertiesForKeys: nil)
-                print("Contents of bundle resource directory:")
-                contents.forEach { print($0.lastPathComponent) }
-            } catch {
-                print("Error listing bundle contents: \(error)")
-            }
         }
     }
     
-    private func loadSounds(start startURL: URL, stop stopURL: URL, esc escURL: URL) throws {
+    private func loadSounds(start startURL: URL, stop stopURL: URL, esc escURL: URL) async throws {
         do {
             startSound = try AVAudioPlayer(contentsOf: startURL)
             stopSound = try AVAudioPlayer(contentsOf: stopURL)
             escSound = try AVAudioPlayer(contentsOf: escURL)
             
-            // Set lower volume for all sounds
-            startSound?.volume = 0.7
-            stopSound?.volume = 0.7
+            // Prepare sounds for instant playback first
+            await MainActor.run {
+                startSound?.prepareToPlay()
+                stopSound?.prepareToPlay()
+                escSound?.prepareToPlay()
+            }
+            
+            // Set lower volume for all sounds after preparation
+            startSound?.volume = 0.4
+            stopSound?.volume = 0.4
             escSound?.volume = 0.3
-            
-            // Prepare sounds for instant playback
-            startSound?.prepareToPlay()
-            stopSound?.prepareToPlay()
-            escSound?.prepareToPlay()
-            
-            print("✅ Successfully loaded all sound files")
         } catch {
-            print("❌ Error loading sounds: \(error.localizedDescription)")
             throw error
         }
     }
     
     func playStartSound() {
         guard isSoundFeedbackEnabled else { return }
+        startSound?.volume = 0.4
         startSound?.play()
     }
     
     func playStopSound() {
         guard isSoundFeedbackEnabled else { return }
+        stopSound?.volume = 0.4
         stopSound?.play()
     }
     
     func playEscSound() {
         guard isSoundFeedbackEnabled else { return }
+        escSound?.volume = 0.3
         escSound?.play()
     }
     

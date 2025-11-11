@@ -1,5 +1,7 @@
 import SwiftUI
 import SwiftData
+import AppKit
+import UniformTypeIdentifiers
 
 enum ModelFilter: String, CaseIterable, Identifiable {
     case recommended = "Recommended"
@@ -17,6 +19,7 @@ struct ModelManagementView: View {
     @EnvironmentObject private var enhancementService: AIEnhancementService
     @Environment(\.modelContext) private var modelContext
     @StateObject private var whisperPrompt = WhisperPrompt()
+    @ObservedObject private var warmupCoordinator = WhisperModelWarmupCoordinator.shared
 
     @State private var selectedFilter: ModelFilter = .recommended
     @State private var isShowingSettings = false
@@ -116,12 +119,18 @@ struct ModelManagementView: View {
             } else {
                 VStack(spacing: 12) {
                     ForEach(filteredModels, id: \.id) { model in
+                        let isWarming = (model as? LocalModel).map { localModel in
+                            warmupCoordinator.isWarming(modelNamed: localModel.name)
+                        } ?? false
+
                         ModelCardRowView(
                             model: model,
+                            whisperState: whisperState, 
                             isDownloaded: whisperState.availableModels.contains { $0.name == model.name },
                             isCurrent: whisperState.currentTranscriptionModel?.name == model.name,
                             downloadProgress: whisperState.downloadProgress,
                             modelURL: whisperState.availableModels.first { $0.name == model.name }?.url,
+                            isWarming: isWarming,
                             deleteAction: {
                                 if let customModel = model as? CustomCloudModel {
                                     alertTitle = "Delete Custom Model"
@@ -149,15 +158,38 @@ struct ModelManagementView: View {
                             },
                             downloadAction: {
                                 if let localModel = model as? LocalModel {
-                                    Task {
-                                        await whisperState.downloadModel(localModel)
-                                    }
+                                    Task { await whisperState.downloadModel(localModel) }
                                 }
                             },
                             editAction: model.provider == .custom ? { customModel in
                                 customModelToEdit = customModel
                             } : nil
                         )
+                    }
+                    
+                    // Import button as a card at the end of the Local list
+                    if selectedFilter == .local {
+                        HStack(spacing: 8) {
+                            Button(action: { presentImportPanel() }) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "square.and.arrow.down")
+                                    Text("Import Local Model…")
+                                        .font(.system(size: 12, weight: .semibold))
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding(16)
+                                .background(CardBackground(isSelected: false))
+                                .cornerRadius(10)
+                            }
+                            .buttonStyle(.plain)
+
+                            InfoTip(
+                                title: "Import local Whisper models",
+                                message: "Add a custom fine-tuned whisper model to use with VoiceInk. Select the downloaded .bin file.",
+                                learnMoreURL: "https://tryvoiceink.com/docs/custom-local-whisper-models"
+                            )
+                            .help("Read more about custom local models")
+                        }
                     }
                     
                     if selectedFilter == .custom {
@@ -190,12 +222,27 @@ struct ModelManagementView: View {
                 return index1 < index2
             }
         case .local:
-            return whisperState.allAvailableModels.filter { $0.provider == .local || $0.provider == .nativeApple }
+            return whisperState.allAvailableModels.filter { $0.provider == .local || $0.provider == .nativeApple || $0.provider == .parakeet }
         case .cloud:
-            let cloudProviders: [ModelProvider] = [.groq, .elevenLabs, .deepgram, .mistral]
+            let cloudProviders: [ModelProvider] = [.groq, .elevenLabs, .deepgram, .mistral, .gemini, .soniox]
             return whisperState.allAvailableModels.filter { cloudProviders.contains($0.provider) }
         case .custom:
             return whisperState.allAvailableModels.filter { $0.provider == .custom }
+        }
+    }
+
+    // MARK: - Import Panel
+    private func presentImportPanel() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.init(filenameExtension: "bin")!]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.resolvesAliases = true
+        panel.title = "Select a Whisper ggml .bin model"
+        if panel.runModal() == .OK, let url = panel.url {
+            Task { @MainActor in
+                await whisperState.importLocalModel(from: url)
+            }
         }
     }
 }

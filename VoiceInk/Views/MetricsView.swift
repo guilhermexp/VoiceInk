@@ -8,39 +8,16 @@ struct MetricsView: View {
     @Query(sort: \Transcription.timestamp) private var transcriptions: [Transcription]
     @EnvironmentObject private var whisperState: WhisperState
     @EnvironmentObject private var hotkeyManager: HotkeyManager
-    @State private var hasLoadedData = false
-    let skipSetupCheck: Bool
-    
-    init(skipSetupCheck: Bool = false) {
-        self.skipSetupCheck = skipSetupCheck
-    }
-    
+    @StateObject private var licenseViewModel = LicenseViewModel()
+
     var body: some View {
         VStack {
-            // Trial message removed for open source version
-            
-            Group {
-                if skipSetupCheck {
-                    MetricsContent(transcriptions: Array(transcriptions))
-                } else if isSetupComplete {
-                    MetricsContent(transcriptions: Array(transcriptions))
-                } else {
-                    MetricsSetupView()
-                }
-            }
+            // No trial messages for open source version
+            MetricsContent(
+                transcriptions: Array(transcriptions),
+                licenseState: licenseViewModel.licenseState
+            )
         }
         .background(Color(.controlBackgroundColor))
-        .task {
-            // Ensure the model context is ready
-            hasLoadedData = true
-        }
-    }
-    
-    private var isSetupComplete: Bool {
-        hasLoadedData &&
-        whisperState.currentTranscriptionModel != nil &&
-        hotkeyManager.selectedHotkey1 != .none &&
-        AXIsProcessTrusted() &&
-        CGPreflightScreenCaptureAccess()
     }
 }

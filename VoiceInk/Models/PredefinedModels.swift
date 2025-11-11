@@ -86,11 +86,34 @@ import Foundation
             isMultilingualModel: true,
             supportedLanguages: getLanguageDictionary(isMultilingual: true, provider: .nativeApple)
         ),
+        
+        // Parakeet Models
+        ParakeetModel(
+            name: "parakeet-tdt-0.6b-v2",
+            displayName: "Parakeet V2",
+            description: "NVIDIA's Parakeet V2 model optimized for lightning-fast English-only transcription.",
+            size: "474 MB",
+            speed: 0.99,
+            accuracy: 0.94,
+            ramUsage: 0.8,
+            supportedLanguages: getLanguageDictionary(isMultilingual: false, provider: .parakeet)
+        ),
+        ParakeetModel(
+            name: "parakeet-tdt-0.6b-v3",
+            displayName: "Parakeet V3",
+            description: "NVIDIA's Parakeet V3 model with multilingual support across English and 25 European languages.",
+            size: "494 MB",
+            speed: 0.99,
+            accuracy: 0.94,
+            ramUsage: 0.8,
+            supportedLanguages: getLanguageDictionary(isMultilingual: true, provider: .parakeet)
+        ),
+        
          // Local Models
          LocalModel(
              name: "ggml-tiny",
              displayName: "Tiny",
-             size: "75 MiB",
+             size: "75 MB",
              supportedLanguages: getLanguageDictionary(isMultilingual: true, provider: .local),
              description: "Tiny model, fastest, least accurate",
              speed: 0.95,
@@ -100,7 +123,7 @@ import Foundation
          LocalModel(
              name: "ggml-tiny.en",
              displayName: "Tiny (English)",
-             size: "75 MiB",
+             size: "75 MB",
              supportedLanguages: getLanguageDictionary(isMultilingual: false, provider: .local),
              description: "Tiny model optimized for English, fastest, least accurate",
              speed: 0.95,
@@ -110,7 +133,7 @@ import Foundation
          LocalModel(
              name: "ggml-base",
              displayName: "Base",
-             size: "142 MiB",
+             size: "142 MB",
              supportedLanguages: getLanguageDictionary(isMultilingual: true, provider: .local),
              description: "Base model, good balance between speed and accuracy, supports multiple languages",
              speed: 0.85,
@@ -120,7 +143,7 @@ import Foundation
          LocalModel(
              name: "ggml-base.en",
              displayName: "Base (English)",
-             size: "142 MiB",
+             size: "142 MB",
              supportedLanguages: getLanguageDictionary(isMultilingual: false, provider: .local),
              description: "Base model optimized for English, good balance between speed and accuracy",
              speed: 0.85,
@@ -130,7 +153,7 @@ import Foundation
          LocalModel(
              name: "ggml-large-v2",
              displayName: "Large v2",
-             size: "2.9 GiB",
+             size: "2.9 GB",
              supportedLanguages: getLanguageDictionary(isMultilingual: true, provider: .local),
              description: "Large model v2, slower than Medium but more accurate",
              speed: 0.3,
@@ -140,7 +163,7 @@ import Foundation
          LocalModel(
              name: "ggml-large-v3",
              displayName: "Large v3",
-             size: "2.9 GiB",
+             size: "2.9 GB",
              supportedLanguages: getLanguageDictionary(isMultilingual: true, provider: .local),
              description: "Large model v3, very slow but most accurate",
              speed: 0.3,
@@ -150,7 +173,7 @@ import Foundation
          LocalModel(
              name: "ggml-large-v3-turbo",
              displayName: "Large v3 Turbo",
-             size: "1.5 GiB",
+             size: "1.5 GB",
              supportedLanguages: getLanguageDictionary(isMultilingual: true, provider: .local),
              description:
              "Large model v3 Turbo, faster than v3 with similar accuracy",
@@ -161,7 +184,7 @@ import Foundation
          LocalModel(
              name: "ggml-large-v3-turbo-q5_0",
              displayName: "Large v3 Turbo (Quantized)",
-             size: "547 MiB",
+             size: "547 MB",
              supportedLanguages: getLanguageDictionary(isMultilingual: true, provider: .local),
              description: "Quantized version of Large v3 Turbo, faster with slightly lower accuracy",
              speed: 0.75,
@@ -200,8 +223,18 @@ import Foundation
            isMultilingual: true,
            supportedLanguages: getLanguageDictionary(isMultilingual: true, provider: .deepgram)
        ),
+       CloudModel(
+           name: "nova-3-medical",
+           displayName: "Nova-3 Medical (Deepgram)",
+           description: "Specialized medical transcription model optimized for clinical environments.",
+           provider: .deepgram,
+           speed: 0.9,
+           accuracy: 0.96,
+           isMultilingual: false,
+           supportedLanguages: getLanguageDictionary(isMultilingual: false, provider: .deepgram)
+       ),
         CloudModel(
-            name: "voxtral-mini-2507",
+            name: "voxtral-mini-latest",
             displayName: "Voxtral Mini (Mistral)",
             description: "Mistral's latest SOTA transcription model.",
             provider: .mistral,
@@ -209,6 +242,39 @@ import Foundation
             accuracy: 0.97,
             isMultilingual: true,
             supportedLanguages: getLanguageDictionary(isMultilingual: true, provider: .mistral)
+        ),
+        
+        // Gemini Models
+        CloudModel(
+            name: "gemini-2.5-pro",
+            displayName: "Gemini 2.5 Pro",
+            description: "Google's advanced multimodal model with high-quality transcription capabilities.",
+            provider: .gemini,
+            speed: 0.7,
+            accuracy: 0.96,
+            isMultilingual: true,
+            supportedLanguages: getLanguageDictionary(isMultilingual: true, provider: .gemini)
+        ),
+        CloudModel(
+            name: "gemini-2.5-flash",
+            displayName: "Gemini 2.5 Flash",
+            description: "Google's optimized model for low-latency transcription with multimodal support.",
+            provider: .gemini,
+            speed: 0.9,
+            accuracy: 0.94,
+            isMultilingual: true,
+            supportedLanguages: getLanguageDictionary(isMultilingual: true, provider: .gemini)
+        )
+        ,
+        CloudModel(
+            name: "stt-async-v3",
+            displayName: "Soniox (stt-async-v3)",
+            description: "Soniox asynchronous transcription model v3.",
+            provider: .soniox,
+            speed: 0.8,
+            accuracy: 0.96,
+            isMultilingual: true,
+            supportedLanguages: getLanguageDictionary(isMultilingual: true, provider: .soniox)
         )
      ]
  

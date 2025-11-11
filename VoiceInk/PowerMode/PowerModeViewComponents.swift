@@ -1,7 +1,5 @@
 import SwiftUI
-// Supporting Views
 
-// VoiceInk's consistent button component
 struct VoiceInkButton: View {
     let title: String
     let action: () -> Void
@@ -58,27 +56,13 @@ struct PowerModeConfigurationsGrid: View {
     
     var body: some View {
         LazyVStack(spacing: 12) {
-            ForEach(powerModeManager.configurations) { config in
+            ForEach($powerModeManager.configurations) { $config in
                 ConfigurationRow(
-                    config: config,
+                    config: $config,
                     isEditing: false,
-                    isDefault: false,
-                    action: { 
-                        onEditConfig(config)
-                    }
+                    powerModeManager: powerModeManager,
+                    onEditConfig: onEditConfig
                 )
-                .contextMenu {
-                    Button(action: { 
-                        onEditConfig(config)
-                    }) {
-                        Label("Edit", systemImage: "pencil")
-                    }
-                    Button(role: .destructive, action: {
-                        powerModeManager.removeConfiguration(with: config.id)
-                    }) {
-                        Label("Remove", systemImage: "trash")
-                    }
-                }
             }
         }
         .padding(.horizontal)
@@ -86,17 +70,16 @@ struct PowerModeConfigurationsGrid: View {
 }
 
 struct ConfigurationRow: View {
-    let config: PowerModeConfig
+    @Binding var config: PowerModeConfig
     let isEditing: Bool
-    let isDefault: Bool
-    let action: () -> Void
+    let powerModeManager: PowerModeManager
+    let onEditConfig: (PowerModeConfig) -> Void
     @EnvironmentObject var enhancementService: AIEnhancementService
     @EnvironmentObject var whisperState: WhisperState
+    @State private var isHovering = false
     
-    // How many app icons to show at maximum
     private let maxAppIconsToShow = 5
     
-    // Data properties
     private var selectedPrompt: CustomPrompt? {
         guard let promptId = config.selectedPrompt,
               let uuid = UUID(uuidString: promptId) else { return nil }
@@ -148,189 +131,208 @@ struct ConfigurationRow: View {
     }
     
     var body: some View {
-        Button(action: action) {
-            VStack(spacing: 0) {
-                // Top row: Emoji, Name, and App/Website counts
-                HStack(spacing: 12) {
-                    // Left: Emoji/Icon
-                    ZStack {
-                        Circle()
-                            .fill(isDefault ? Color.accentColor.opacity(0.15) : Color(.controlBackgroundColor))
-                            .frame(width: 40, height: 40)
-                        
-                        if isDefault {
-                            Image(systemName: "gearshape.fill")
-                                .font(.system(size: 18))
-                                .foregroundColor(.accentColor)
-                        } else {
-                            Text(config.emoji)
-                                .font(.system(size: 20))
-                        }
-                    }
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle()
+                        .fill(Color(NSColor.controlBackgroundColor))
+                        .frame(width: 40, height: 40)
                     
-                    // Middle: Name and badge
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack(spacing: 6) {
-                            Text(config.name)
-                                .font(.system(size: 15, weight: .semibold))
-                            
-                            if isDefault {
-                                Text("Default")
-                                    .font(.system(size: 10, weight: .medium))
-                                    .padding(.horizontal, 5)
-                                    .padding(.vertical, 2)
-                                    .background(Capsule().fill(Color.accentColor.opacity(0.15)))
-                                    .foregroundColor(.accentColor)
-                            }
-                        }
-                        
-                        if isDefault {
-                            Text("Fallback power mode")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    
-                    Spacer()
-                    
-                    // Right: App Icons and Website Count
-                    if !isDefault {
-                        HStack(alignment: .center, spacing: 6) {
-                            // App Count
-                            if appCount > 0 {
-                                HStack(spacing: 3) {
-                                    Text(appText)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                    
-                                    Image(systemName: "app.fill")
-                                        .font(.system(size: 9))
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                            
-                            // Website Count
-                            if websiteCount > 0 {
-                                HStack(spacing: 3) {
-                                    Text(websiteText)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                    
-                                    Image(systemName: "globe")
-                                        .font(.system(size: 9))
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                        }
-                    }
+                    Text(config.emoji)
+                        .font(.system(size: 20))
                 }
-                .padding(.vertical, 12)
-                .padding(.horizontal, 14)
                 
-                // Only add divider and settings row if we have settings
-                if selectedModel != nil || selectedLanguage != nil || config.isAIEnhancementEnabled {
-                    Divider()
-                        .padding(.horizontal, 16)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(config.name)
+                            .font(.system(size: 15, weight: .semibold))
+                        
+                        if config.isDefault {
+                            Text("Default")
+                                .font(.system(size: 11, weight: .medium))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(Color.accentColor))
+                                .foregroundColor(.white)
+                        }
+                    }
                     
-                    // Settings badges in specified order
-                    HStack(spacing: 8) {
-                        // 1. Voice Model badge
-                        if let model = selectedModel, model != "Default" {
+                    HStack(spacing: 12) {
+                        if appCount > 0 {
                             HStack(spacing: 4) {
-                                Image(systemName: "waveform")
+                                Image(systemName: "app.fill")
                                     .font(.system(size: 10))
-                                Text(model)
-                                    .font(.caption)
+                                Text(appText)
+                                    .font(.caption2)
                             }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Capsule()
-                                .fill(Color(.controlBackgroundColor)))
-                            .overlay(
-                                Capsule()
-                                    .stroke(Color(.separatorColor), lineWidth: 0.5)
-                            )
                         }
                         
-                        // 2. Language badge
-                        if let language = selectedLanguage, language != "Default" {
+                        if websiteCount > 0 {
                             HStack(spacing: 4) {
                                 Image(systemName: "globe")
                                     .font(.system(size: 10))
-                                Text(language)
-                                    .font(.caption)
+                                Text(websiteText)
+                                    .font(.caption2)
                             }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Capsule()
-                                .fill(Color(.controlBackgroundColor)))
-                            .overlay(
-                                Capsule()
-                                    .stroke(Color(.separatorColor), lineWidth: 0.5)
-                            )
                         }
-                        
-                        // 3. AI Model badge if specified (moved before AI Enhancement)
-                        if config.isAIEnhancementEnabled, let modelName = config.selectedAIModel, !modelName.isEmpty {
-                            HStack(spacing: 4) {
-                                Image(systemName: "cpu")
-                                    .font(.system(size: 10))
-                                // Display a shortened version of the model name if it's too long (increased limit)
-                                Text(modelName.count > 20 ? String(modelName.prefix(18)) + "..." : modelName)
-                                    .font(.caption)
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Capsule()
-                                .fill(Color(.controlBackgroundColor)))
-                            .overlay(
-                                Capsule()
-                                    .stroke(Color(.separatorColor), lineWidth: 0.5)
-                            )
-                        }
-                        
-                        // 4. AI Enhancement badge
-                        if config.isAIEnhancementEnabled {
-                            // Context Awareness badge (moved before AI Enhancement)
-                            if config.useScreenCapture {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "camera.viewfinder")
-                                        .font(.system(size: 10))
-                                    Text("Context Awareness")
-                                        .font(.caption)
-                                }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Capsule()
-                                    .fill(Color(.controlBackgroundColor)))
-                                .overlay(
-                                    Capsule()
-                                        .stroke(Color(.separatorColor), lineWidth: 0.5)
-                                )
-                            }
-                            
-                            HStack(spacing: 4) {
-                                Image(systemName: "sparkles")
-                                    .font(.system(size: 10))
-                                Text(selectedPrompt?.title ?? "AI")
-                                    .font(.caption)
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Capsule()
-                                .fill(Color.accentColor.opacity(0.1)))
-                            .foregroundColor(.accentColor)
-                        }
-                        
-                        Spacer()
                     }
-                    .padding(.vertical, 10)
-                    .padding(.horizontal, 16)
+                    .foregroundColor(.secondary)
                 }
+                
+                Spacer()
+                
+                Toggle("", isOn: $config.isEnabled)
+                    .toggleStyle(SwitchToggleStyle(tint: .accentColor))
+                    .labelsHidden()
+                    .onChange(of: config.isEnabled) { _, _ in
+                        powerModeManager.updateConfiguration(config)
+                    }
             }
-            .background(CardBackground(isSelected: isEditing))
+            .padding(.vertical, 12)
+            .padding(.horizontal, 14)
+            
+            if selectedModel != nil || selectedLanguage != nil || config.isAIEnhancementEnabled || config.isAutoSendEnabled {
+                Divider()
+                    .padding(.horizontal, 16)
+                
+                HStack(spacing: 8) {
+                    if let model = selectedModel, model != "Default" {
+                        HStack(spacing: 4) {
+                            Image(systemName: "waveform")
+                                .font(.system(size: 10))
+                            Text(model)
+                                .font(.caption)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Capsule()
+                            .fill(Color(NSColor.controlBackgroundColor)))
+                        .overlay(
+                            Capsule()
+                                .stroke(Color(NSColor.separatorColor), lineWidth: 0.5)
+                        )
+                    }
+                    
+                    if let language = selectedLanguage, language != "Default" {
+                        HStack(spacing: 4) {
+                            Image(systemName: "globe")
+                                .font(.system(size: 10))
+                            Text(language)
+                                .font(.caption)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Capsule()
+                            .fill(Color(NSColor.controlBackgroundColor)))
+                        .overlay(
+                            Capsule()
+                                .stroke(Color(NSColor.separatorColor), lineWidth: 0.5)
+                        )
+                    }
+                    
+                    if config.isAIEnhancementEnabled, let modelName = config.selectedAIModel, !modelName.isEmpty {
+                        HStack(spacing: 4) {
+                            Image(systemName: "cpu")
+                                .font(.system(size: 10))
+                            Text(modelName.count > 20 ? String(modelName.prefix(18)) + "..." : modelName)
+                                .font(.caption)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Capsule()
+                            .fill(Color(NSColor.controlBackgroundColor)))
+                        .overlay(
+                            Capsule()
+                                .stroke(Color(NSColor.separatorColor), lineWidth: 0.5)
+                        )
+                    }
+                    
+                    if config.isAutoSendEnabled {
+                        HStack(spacing: 4) {
+                            Image(systemName: "keyboard")
+                                .font(.system(size: 10))
+                            Text("Auto Send")
+                                .font(.caption)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Capsule()
+                            .fill(Color(NSColor.controlBackgroundColor)))
+                        .overlay(
+                            Capsule()
+                                .stroke(Color(NSColor.separatorColor), lineWidth: 0.5)
+                        )
+                    }
+                    if config.isAIEnhancementEnabled {
+                        if config.useScreenCapture {
+                            HStack(spacing: 4) {
+                                Image(systemName: "camera.viewfinder")
+                                    .font(.system(size: 10))
+                                Text("Context Awareness")
+                                    .font(.caption)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Capsule()
+                                .fill(Color(NSColor.controlBackgroundColor)))
+                            .overlay(
+                                Capsule()
+                                    .stroke(Color(NSColor.separatorColor), lineWidth: 0.5)
+                            )
+                        }
+                        
+                        HStack(spacing: 4) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 10))
+                            Text(selectedPrompt?.title ?? "AI")
+                                .font(.caption)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Capsule()
+                            .fill(Color.accentColor.opacity(0.1)))
+                        .foregroundColor(.accentColor)
+                    }
+
+                    Spacer()
+                }
+                .padding(.vertical, 10)
+                .padding(.horizontal, 16)
+            }
+    }
+    .background(CardBackground(isSelected: isEditing))
+    .opacity(config.isEnabled ? 1.0 : 0.5)
+
+    .onHover { hovering in
+        withAnimation(.easeInOut(duration: 0.15)) {
+            isHovering = hovering
         }
-        .buttonStyle(.plain)
+    }
+    .onTapGesture(count: 2) {
+        onEditConfig(config)
+    }
+    .contextMenu {
+        Button(action: {
+            onEditConfig(config)
+        }) {
+            Label("Edit", systemImage: "pencil")
+        }
+        Button(role: .destructive, action: {
+            let alert = NSAlert()
+            alert.messageText = "Delete Power Mode?"
+            alert.informativeText = "Are you sure you want to delete the '\(config.name)' power mode? This action cannot be undone."
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "Delete")
+            alert.addButton(withTitle: "Cancel")
+            alert.buttons[0].hasDestructiveAction = true
+            
+            if alert.runModal() == .alertFirstButtonReturn {
+                powerModeManager.removeConfiguration(with: config.id)
+            }
+        }) {
+            Label("Delete", systemImage: "trash")
+        }
+    }
     }
     
     private var isSelected: Bool {
@@ -338,7 +340,6 @@ struct ConfigurationRow: View {
     }
 }
 
-// App Icon View Component
 struct PowerModeAppIcon: View {
     let bundleId: String
     
@@ -389,4 +390,4 @@ struct AppGridItem: View {
         }
         .buttonStyle(.plain)
     }
-} 
+}

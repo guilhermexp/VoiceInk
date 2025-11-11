@@ -22,6 +22,7 @@ struct LanguageSelectionView: View {
 
         // Post notification for language change
         NotificationCenter.default.post(name: .languageDidChange, object: nil)
+        NotificationCenter.default.post(name: .AppSettingsDidChange, object: nil)
     }
     
     // Function to check if current model is multilingual
@@ -30,6 +31,13 @@ struct LanguageSelectionView: View {
             return false
         }
         return currentModel.isMultilingualModel
+    }
+
+    private func languageSelectionDisabled() -> Bool {
+        guard let provider = whisperState.currentTranscriptionModel?.provider else {
+            return false
+        }
+        return provider == .parakeet || provider == .gemini
     }
 
     // Function to get current model's supported languages
@@ -68,7 +76,22 @@ struct LanguageSelectionView: View {
 
             if let currentModel = whisperState.currentTranscriptionModel
             {
-                if isMultilingualModel() {
+                if languageSelectionDisabled() {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Language: Autodetected")
+                            .font(.subheadline)
+                            .foregroundColor(.primary)
+
+                        Text("Current model: \(currentModel.displayName)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+
+                        Text("The transcription language is automatically detected by the model.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .disabled(true)
+                } else if isMultilingualModel() {
                     VStack(alignment: .leading, spacing: 8) {
                         Picker("Select Language", selection: $selectedLanguage) {
                             ForEach(
@@ -133,7 +156,15 @@ struct LanguageSelectionView: View {
     // New compact view for menu bar
     private var menuItemView: some View {
         Group {
-            if isMultilingualModel() {
+            if languageSelectionDisabled() {
+                Button {
+                    // Do nothing, just showing info
+                } label: {
+                    Text("Language: Autodetected")
+                        .foregroundColor(.secondary)
+                }
+                .disabled(true)
+            } else if isMultilingualModel() {
                 Menu {
                     ForEach(
                         getCurrentModelLanguages().sorted(by: {

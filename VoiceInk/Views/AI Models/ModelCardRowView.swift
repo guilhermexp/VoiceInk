@@ -3,17 +3,18 @@ import AppKit
 
 struct ModelCardRowView: View {
     let model: any TranscriptionModel
+    @ObservedObject var whisperState: WhisperState
     let isDownloaded: Bool
     let isCurrent: Bool
     let downloadProgress: [String: Double]
     let modelURL: URL?
+    let isWarming: Bool
     
     // Actions
     var deleteAction: () -> Void
     var setDefaultAction: () -> Void
     var downloadAction: () -> Void
     var editAction: ((CustomCloudModel) -> Void)?
-    
     var body: some View {
         Group {
             switch model.provider {
@@ -25,9 +26,26 @@ struct ModelCardRowView: View {
                         isCurrent: isCurrent,
                         downloadProgress: downloadProgress,
                         modelURL: modelURL,
+                        isWarming: isWarming,
                         deleteAction: deleteAction,
                         setDefaultAction: setDefaultAction,
                         downloadAction: downloadAction
+                    )
+                } else if let importedModel = model as? ImportedLocalModel {
+                    ImportedLocalModelCardView(
+                        model: importedModel,
+                        isDownloaded: isDownloaded,
+                        isCurrent: isCurrent,
+                        modelURL: modelURL,
+                        deleteAction: deleteAction,
+                        setDefaultAction: setDefaultAction
+                    )
+                }
+                    case .parakeet:
+            if let parakeetModel = model as? ParakeetModel {
+                ParakeetModelCardRowView(
+                    model: parakeetModel,
+                        whisperState: whisperState
                     )
                 }
             case .nativeApple:
@@ -38,7 +56,7 @@ struct ModelCardRowView: View {
                         setDefaultAction: setDefaultAction
                     )
                 }
-            case .groq, .elevenLabs, .deepgram, .mistral:
+            case .groq, .elevenLabs, .deepgram, .mistral, .gemini, .soniox:
                 if let cloudModel = model as? CloudModel {
                     CloudModelCardView(
                         model: cloudModel,

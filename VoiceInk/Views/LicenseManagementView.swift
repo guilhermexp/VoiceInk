@@ -48,13 +48,13 @@ struct LicenseManagementView: View {
                     }
                 }
                 
-                Text(licenseViewModel.licenseState == .licensed ? 
+                Text(licenseViewModel.licenseState == .licensed ?
                      "Thank you for supporting VoiceInk" :
                      "Transcribe what you say to text instantly with AI")
                     .font(.title3)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                
+
                 if case .licensed = licenseViewModel.licenseState {
                     HStack(spacing: 40) {
                         Button {
@@ -92,11 +92,11 @@ struct LicenseManagementView: View {
                         .buttonStyle(.plain)
                         
                         Button {
-                            if let url = URL(string: "https://github.com/Beingpax/VoiceInk/issues") {
+                            if let url = URL(string: "https://buymeacoffee.com/beingpax") {
                                 NSWorkspace.shared.open(url)
                             }
                         } label: {
-                            featureItem(icon: "map.fill", title: "Roadmap", color: .green)
+                            animatedTipJarItem()
                         }
                         .buttonStyle(.plain)
                     }
@@ -185,6 +185,32 @@ struct LicenseManagementView: View {
             .padding(32)
             .background(CardBackground(isSelected: false))
             .shadow(color: .black.opacity(0.05), radius: 10)
+            
+            // Already Purchased Section
+            VStack(spacing: 20) {
+                Text("Already purchased?")
+                    .font(.headline)
+
+                HStack(spacing: 12) {
+                    Text("Manage your license and device activations")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Button(action: {
+                        if let url = URL(string: "https://polar.sh/beingpax/portal/request") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }) {
+                        Text("License Management Portal")
+                            .frame(width: 180)
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+            .padding(32)
+            .background(CardBackground(isSelected: false))
+            .shadow(color: .black.opacity(0.05), radius: 10)
         }
     }
     
@@ -227,7 +253,7 @@ struct LicenseManagementView: View {
             VStack(alignment: .leading, spacing: 16) {
                 Text("License Management")
                     .font(.headline)
-                
+
                 Button(role: .destructive, action: {
                     licenseViewModel.removeLicense()
                 }) {
@@ -250,6 +276,29 @@ struct LicenseManagementView: View {
                 .foregroundStyle(color)
             
             Text(title)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.primary)
+        }
+    }
+    
+    @State private var heartPulse = false
+    
+    private func animatedTipJarItem() -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "heart.fill")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(.pink)
+                .scaleEffect(heartPulse ? 1.3 : 1.0)
+                .animation(
+                    Animation.easeInOut(duration: 1.2)
+                        .repeatForever(autoreverses: true),
+                    value: heartPulse
+                )
+                .onAppear {
+                    heartPulse = true
+                }
+            
+            Text("Tip Jar")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.primary)
         }

@@ -1,6 +1,5 @@
 import SwiftUI
 
-// Power Mode Popover for recorder views
 struct PowerModePopover: View {
     @ObservedObject var powerModeManager = PowerModeManager.shared
     @State private var selectedConfig: PowerModeConfig?
@@ -17,58 +16,60 @@ struct PowerModePopover: View {
                 .background(Color.white.opacity(0.1))
             
             ScrollView {
+                let enabledConfigs = powerModeManager.configurations.filter { $0.isEnabled }
                 VStack(alignment: .leading, spacing: 4) {
-                    // Default Configuration
-                    PowerModeRow(
-                        config: powerModeManager.defaultConfig,
-                        isSelected: selectedConfig?.id == powerModeManager.defaultConfig.id,
-                        action: {
-                            powerModeManager.setActiveConfiguration(powerModeManager.defaultConfig)
-                            selectedConfig = powerModeManager.defaultConfig
-                            // Apply configuration immediately
-                            applySelectedConfiguration()
+                    if enabledConfigs.isEmpty {
+                        VStack(alignment: .center, spacing: 8) {
+                            Image(systemName: "sparkles")
+                                .foregroundColor(.white.opacity(0.6))
+                                .font(.system(size: 16))
+                            Text("No Power Modes Available")
+                                .foregroundColor(.white.opacity(0.8))
+                                .font(.system(size: 13))
+                                .lineLimit(1)
+                                .truncationMode(.tail)
                         }
-                    )
-                    
-                    // Custom Configurations
-                    ForEach(powerModeManager.configurations) { config in
-                        PowerModeRow(
-                            config: config,
-                            isSelected: selectedConfig?.id == config.id,
-                            action: {
-                                powerModeManager.setActiveConfiguration(config)
-                                selectedConfig = config
-                                // Apply configuration immediately
-                                applySelectedConfiguration()
-                            }
-                        )
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                    } else {
+                        ForEach(enabledConfigs) { config in
+                            PowerModeRow(
+                                config: config,
+                                isSelected: selectedConfig?.id == config.id,
+                                action: {
+                                    powerModeManager.setActiveConfiguration(config)
+                                    selectedConfig = config
+                                    applySelectedConfiguration()
+                                }
+                            )
+                        }
                     }
                 }
                 .padding(.horizontal)
             }
         }
         .frame(width: 180)
-        .frame(maxHeight: 300)
+        .frame(maxHeight: 340)
         .padding(.vertical, 8)
         .background(Color.black)
         .environment(\.colorScheme, .dark)
         .onAppear {
-            // Set the initially selected configuration
             selectedConfig = powerModeManager.activeConfiguration
+        }
+        .onChange(of: powerModeManager.activeConfiguration) { newValue in
+            selectedConfig = newValue
         }
     }
     
-    // Helper function to apply the selected configuration
     private func applySelectedConfiguration() {
         Task {
             if let config = selectedConfig {
-                await ActiveWindowService.shared.applyConfiguration(config)
+                await PowerModeSessionManager.shared.beginSession(with: config)
             }
         }
     }
 }
 
-// Row view for each power mode in the popover
 struct PowerModeRow: View {
     let config: PowerModeConfig
     let isSelected: Bool
@@ -77,15 +78,14 @@ struct PowerModeRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
-                // Always use the emoji from the configuration
                 Text(config.emoji)
                     .font(.system(size: 14))
-                
+
                 Text(config.name)
                     .foregroundColor(.white.opacity(0.9))
                     .font(.system(size: 13))
                     .lineLimit(1)
-                
+
                 if isSelected {
                     Spacer()
                     Image(systemName: "checkmark")
@@ -93,9 +93,10 @@ struct PowerModeRow: View {
                         .font(.system(size: 10))
                 }
             }
-            .contentShape(Rectangle())
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 4)
             .padding(.horizontal, 8)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .background(isSelected ? Color.white.opacity(0.1) : Color.clear)

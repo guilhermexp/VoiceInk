@@ -5,8 +5,7 @@ struct NotchRecorderView: View {
     @ObservedObject var recorder: Recorder
     @EnvironmentObject var windowManager: NotchWindowManager
     @State private var isHovering = false
-    @State private var showPowerModePopover = false
-    @State private var showEnhancementPromptPopover = false
+    @State private var activePopover: ActivePopoverState = .none
     @ObservedObject private var powerModeManager = PowerModeManager.shared
     
     @EnvironmentObject private var enhancementService: AIEnhancementService
@@ -32,61 +31,23 @@ struct NotchRecorderView: View {
     }
     
     private var leftSection: some View {
-        HStack(spacing: 8) {
-            let isRecording = whisperState.recordingState == .recording
-            let isProcessing = whisperState.recordingState == .transcribing || whisperState.recordingState == .enhancing
-            
-            RecorderRecordButton(
-                isRecording: isRecording,
-                isProcessing: isProcessing
-            ) {
-                Task { await whisperState.toggleRecord() }
-            }
-            .frame(width: 22)
-            
-            rightToggleButton
-            
+        HStack(spacing: 12) {
+            RecorderPromptButton(
+                activePopover: $activePopover,
+                buttonSize: 22,
+                padding: EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0)
+            )
+
+            RecorderPowerModeButton(
+                activePopover: $activePopover,
+                buttonSize: 22,
+                padding: EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0)
+            )
+
             Spacer()
         }
         .frame(width: 64)
         .padding(.leading, 16)
-    }
-    
-    private var rightToggleButton: some View {
-        Group {
-            if powerModeManager.isPowerModeEnabled {
-                RecorderToggleButton(
-                    isEnabled: powerModeManager.isPowerModeEnabled,
-                    icon: powerModeManager.currentActiveConfiguration.emoji,
-                    color: .orange,
-                    disabled: false
-                ) {
-                    showPowerModePopover.toggle()
-                }
-                .frame(width: 22)
-                .popover(isPresented: $showPowerModePopover, arrowEdge: .bottom) {
-                    PowerModePopover()
-                }
-            } else {
-                RecorderToggleButton(
-                    isEnabled: enhancementService.isEnhancementEnabled,
-                    icon: enhancementService.activePrompt?.icon.rawValue ?? "brain",
-                    color: .blue,
-                    disabled: false
-                ) {
-                    if enhancementService.isEnhancementEnabled {
-                        showEnhancementPromptPopover.toggle()
-                    } else {
-                        enhancementService.isEnhancementEnabled = true
-                    }
-                }
-                .frame(width: 22)
-                .popover(isPresented: $showEnhancementPromptPopover, arrowEdge: .bottom) {
-                    EnhancementPromptPopover()
-                        .environmentObject(enhancementService)
-                }
-            }
-        }
     }
     
     private var centerSection: some View {
@@ -97,11 +58,11 @@ struct NotchRecorderView: View {
     }
     
     private var rightSection: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 8) {
             Spacer()
             statusDisplay
         }
-        .frame(width: 84)
+        .frame(width: 64)
         .padding(.trailing, 16)
     }
     
@@ -124,7 +85,6 @@ struct NotchRecorderView: View {
                     rightSection
                 }
                 .frame(height: menuBarHeight)
-                .frame(maxWidth: windowManager.isVisible ? .infinity : 0)
                 .background(Color.black)
                 .mask {
                     NotchShape(cornerRadius: 10)
@@ -138,7 +98,3 @@ struct NotchRecorderView: View {
         }
     }
 }
-
-
-
- 
